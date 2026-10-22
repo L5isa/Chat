@@ -860,22 +860,38 @@ height: 19px;
       }
 
       #chat .welcomePanel .rb-avatar {
-        display: block;
-        flex: 0 0 45px;
-        width: 45px;
-        height: 45px;
-        overflow: hidden;
-        border-radius: 50%;
+        position: relative;
+        display: block !important;
+        flex: 0 0 45px !important;
+        width: 45px !important;
+        height: 45px !important;
+        min-width: 45px !important;
+        min-height: 45px !important;
+        max-width: 45px !important;
+        max-height: 45px !important;
+        box-sizing: border-box !important;
+        padding: 0 !important;
+        border: 0 !important;
+        overflow: hidden !important;
+        border-radius: 50% !important;
         background: var(--rb-line);
       }
 
       #chat .welcomePanel .rb-avatar img {
-        display: block;
-        width: 100%;
-        height: 100%;
-        border: 0;
-        border-radius: 50%;
-        object-fit: cover;
+        display: block !important;
+        width: 45px !important;
+        height: 45px !important;
+        min-width: 45px !important;
+        min-height: 45px !important;
+        max-width: 45px !important;
+        max-height: 45px !important;
+        box-sizing: border-box !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 50% !important;
+        object-fit: cover !important;
+        object-position: center !important;
       }
 
       #chat .welcomePanel .rb-body {
@@ -3080,10 +3096,11 @@ function renameGroup(name) {
 
       if (source) {
         const img = doc.createElement("img");
-        img.src = source;
         img.alt = "";
         img.loading = "eager";
-        img.addEventListener("error", () => img.remove(), { once: true });
+        img.width = 45;
+        img.height = 45;
+        img.src = source;
         avatar.appendChild(img);
       }
 
