@@ -1634,10 +1634,28 @@ font-weight: 600;
         position: relative;
         isolation: isolate;
         display: block;
-        width: min(100%, 80px);
-        aspect-ratio: 1;
+        flex: none;
+        width: min(100%, 80px) !important;
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        box-sizing: border-box !important;
         margin: 0 auto 20px;
+        padding: 0 !important;
         overflow: visible;
+      }
+
+      #chat .welcomePanel .rb-pin-face::before {
+        content: "" !important;
+        display: block !important;
+        position: static !important;
+        width: 100%;
+        height: 0 !important;
+        margin: 0 !important;
+        padding: 100% 0 0 !important;
+        border: 0 !important;
+        box-sizing: content-box !important;
+        background: none !important;
       }
 
       #chat .welcomePanel .rb-pin-face::after {
@@ -1674,16 +1692,25 @@ font-weight: 600;
       }
 
       #chat .welcomePanel .rb-pin-image {
-        position: relative;
+        position: absolute !important;
+        inset: 0 !important;
         z-index: 2;
-        display: block;
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
-        border: 0;
-        border-radius: 50%;
+        display: block !important;
+        width: 100% !important;
+        height: 100% !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        max-width: none !important;
+        max-height: none !important;
+        box-sizing: border-box !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        border: 0 !important;
+        border-radius: 50% !important;
         background: var(--rb-line);
-        object-fit: cover;
+        object-fit: cover !important;
+        object-position: center !important;
       }
 
       #chat .welcomePanel .rb-pin-name {
