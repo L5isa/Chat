@@ -2864,6 +2864,8 @@ const isPinned = Boolean(pinIcon);
         dateTitle: date?.getAttribute("title") || ""
       };
 
+data.timestamp = Date.parse(data.dateTitle || "");
+
       data.search = normalize([
         data.name,
         data.chatName,
@@ -3518,7 +3520,7 @@ group.section.toggleAttribute(
         let latestStamp = -Infinity;
 
         for (const record of pool) {
-          const stamp = Date.parse(record.dateTitle || "");
+          const stamp = record.timestamp;
 
           if (Number.isFinite(stamp) && stamp > latestStamp) {
             latestStamp = stamp;
@@ -3526,19 +3528,35 @@ group.section.toggleAttribute(
           }
         }
 
+        let nextPreview;
+        let nextDate;
+        let nextDateTitle;
+
         if (unavailable) {
           const cachedCount = Number(group.cached?.count) || 0;
 
-          group.preview.textContent = cachedCount
+          nextPreview = cachedCount
             ? `当前载入范围内没有聊天记录 · 上次显示 ${cachedCount} 条`
             : "当前载入范围内没有聊天记录";
 
-          group.date.textContent = "[未载入]";
-          group.date.title = "";
+          nextDate = "[未载入]";
+          nextDateTitle = "";
         } else {
-          group.preview.textContent = first?.preview || "暂无内容预览";
-          group.date.textContent = first?.date || "";
-          group.date.title = first?.dateTitle || "";
+          nextPreview = first?.preview || "暂无内容预览";
+          nextDate = first?.date || "";
+          nextDateTitle = first?.dateTitle || "";
+        }
+
+        if (group.preview.textContent !== nextPreview) {
+          group.preview.textContent = nextPreview;
+        }
+
+        if (group.date.textContent !== nextDate) {
+          group.date.textContent = nextDate;
+        }
+
+        if (group.date.title !== nextDateTitle) {
+          group.date.title = nextDateTitle;
         }
 
         group.content.hidden = unavailable || !open;
@@ -3829,19 +3847,75 @@ for (const [el, ui] of chatDecorations) {
           element => element.classList.contains("rb-group")
         );
 
-        groups = batches.map(batch =>
-          createGroup(
-            batch.name,
-            batch.records,
-            batch.cached || roleIndex.get(batch.name) || null
-          )
+        const oldGroups = new Map(
+          groups.map(group => [group.name, group])
         );
 
-        oldSections.forEach(section => section.remove());
+        const nextGroups = batches.map(batch => {
+          const cached =
+            batch.cached ||
+            roleIndex.get(batch.name) ||
+            null;
 
-        const fragment = doc.createDocumentFragment();
-        groups.forEach(group => fragment.appendChild(group.section));
-        list.prepend(fragment);
+          const existing = oldGroups.get(batch.name);
+
+          const reusable =
+            existing &&
+            existing.section.parentElement === list &&
+            existing.records.length === batch.records.length &&
+            existing.records.every((record, index) => {
+              const next = batch.records[index];
+
+              return (
+                record.el === next.el &&
+                record.signature === next.signature &&
+                record.el.parentElement === existing.content
+              );
+            }) &&
+            (
+              batch.records.length > 0 ||
+              (
+                (existing.cached?.avatar || "") ===
+                  (cached?.avatar || "") &&
+                (existing.cached?.count || 0) ===
+                  (cached?.count || 0)
+              )
+            );
+
+          if (reusable) {
+            existing.records = batch.records;
+            existing.cached = cached;
+            return existing;
+          }
+
+          return createGroup(
+            batch.name,
+            batch.records,
+            cached
+          );
+        });
+
+        const retainedSections = new Set(
+          nextGroups.map(group => group.section)
+        );
+
+        for (const section of oldSections) {
+          if (!retainedSections.has(section)) {
+            section.remove();
+          }
+        }
+
+        groups = nextGroups;
+
+        let position = list.firstElementChild;
+
+        for (const group of groups) {
+          if (group.section !== position) {
+            list.insertBefore(group.section, position);
+          }
+
+          position = group.section.nextElementSibling;
+        }
 
         previous = groups.flatMap(group => group.records);
         filterGroups();
@@ -3856,7 +3930,7 @@ for (const [el, ui] of chatDecorations) {
 
     function schedule() {
       if (stopped || timer) return;
-      timer = view.setTimeout(render, 80);
+      timer = view.requestAnimationFrame(render);
     }
 
     const observer = new view.MutationObserver(() => {
@@ -3864,25 +3938,33 @@ for (const [el, ui] of chatDecorations) {
     });
 
     const shellObserver = new view.MutationObserver(records => {
-      const outsideList = records.some(record =>
-        !list ||
-        (
-          record.target !== list &&
-          !list.contains(record.target)
-        )
-      );
+      if (stopped) return;
 
-      if (!outsideList) return;
+      if (list) {
+        if (!list.isConnected || !toolbar.isConnected) {
+          schedule();
+        }
 
-      const current = doc.querySelector(
-        "#chat .welcomePanel .recentChatList"
-      );
+        return;
+      }
 
-      if (
-        current !== list ||
-        Boolean(current && !toolbar.isConnected)
-      ) {
-        schedule();
+      const selector = "#chat .welcomePanel .recentChatList";
+
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (
+            !(node instanceof view.Element) ||
+            !node.isConnected
+          ) continue;
+
+          if (
+            node.matches(selector) ||
+            node.querySelector(selector)
+          ) {
+            schedule();
+            return;
+          }
+        }
       }
     });
 
@@ -3913,7 +3995,7 @@ for (const [el, ui] of chatDecorations) {
       stopped = true;
       observer.disconnect();
       shellObserver.disconnect();
-      view.clearTimeout(timer);
+      view.cancelAnimationFrame(timer);
       view.clearTimeout(settingsTimer);
       settingsTimer = 0;
 
@@ -3984,9 +4066,8 @@ for (const [el, ui] of chatDecorations) {
     }
 
     view[KEY] = { destroy };
-    render();
+    schedule();
   }
 
   start();
 })();
-
