@@ -860,7 +860,7 @@ height: 19px;
       }
 
       #chat .welcomePanel .rb-avatar {
-        position: relative;
+        position: relative !important;
         display: block !important;
         flex: 0 0 45px !important;
         width: 45px !important;
@@ -878,13 +878,15 @@ height: 19px;
       }
 
       #chat .welcomePanel .rb-avatar img {
+        position: absolute !important;
+        inset: 0 !important;
         display: block !important;
-        width: 45px !important;
-        height: 45px !important;
-        min-width: 45px !important;
-        min-height: 45px !important;
-        max-width: 45px !important;
-        max-height: 45px !important;
+        width: 100% !important;
+        height: 100% !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        max-width: none !important;
+        max-height: none !important;
         box-sizing: border-box !important;
         margin: 0 !important;
         padding: 0 !important;
