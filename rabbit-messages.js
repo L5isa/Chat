@@ -3082,7 +3082,7 @@ function renameGroup(name) {
         const img = doc.createElement("img");
         img.src = source;
         img.alt = "";
-        img.loading = "lazy";
+        img.loading = "eager";
         img.addEventListener("error", () => img.remove(), { once: true });
         avatar.appendChild(img);
       }
