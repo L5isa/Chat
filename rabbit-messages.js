@@ -1647,31 +1647,22 @@ font-weight: 600;
       }
 
       #chat .welcomePanel .rb-pin-face {
-        position: relative;
+        position: relative !important;
         isolation: isolate;
-        display: block;
-        flex: none;
-        width: min(100%, 80px) !important;
-        height: auto !important;
-        min-height: 0 !important;
-        max-height: none !important;
-        box-sizing: border-box !important;
-        margin: 0 auto 20px;
-        padding: 0 !important;
-        overflow: visible;
-      }
-
-      #chat .welcomePanel .rb-pin-face::before {
-        content: "" !important;
         display: block !important;
-        position: static !important;
-        width: 100%;
-        height: 0 !important;
-        margin: 0 !important;
-        padding: 100% 0 0 !important;
+        flex: 0 0 80px !important;
+        width: 80px !important;
+        height: 80px !important;
+        min-width: 80px !important;
+        min-height: 80px !important;
+        max-width: 80px !important;
+        max-height: 80px !important;
+        aspect-ratio: auto !important;
+        box-sizing: border-box !important;
+        margin: 0 auto 20px !important;
+        padding: 0 !important;
         border: 0 !important;
-        box-sizing: content-box !important;
-        background: none !important;
+        overflow: visible !important;
       }
 
       #chat .welcomePanel .rb-pin-face::after {
@@ -1709,24 +1700,29 @@ font-weight: 600;
 
       #chat .welcomePanel .rb-pin-image {
         position: absolute !important;
-        inset: 0 !important;
+        inset: 0 auto auto 0 !important;
         z-index: 2;
         display: block !important;
-        width: 100% !important;
-        height: 100% !important;
-        min-width: 0 !important;
-        min-height: 0 !important;
-        max-width: none !important;
-        max-height: none !important;
+        width: 80px !important;
+        height: 80px !important;
+        min-width: 80px !important;
+        min-height: 80px !important;
+        max-width: 80px !important;
+        max-height: 80px !important;
+        aspect-ratio: auto !important;
         box-sizing: border-box !important;
         margin: 0 !important;
         padding: 0 !important;
-        overflow: hidden !important;
         border: 0 !important;
         border-radius: 50% !important;
+        overflow: hidden !important;
         background: var(--rb-line);
         object-fit: cover !important;
         object-position: center !important;
+        transform: none !important;
+        scale: none !important;
+        rotate: none !important;
+        translate: none !important;
       }
 
       #chat .welcomePanel .rb-pin-name {
@@ -2372,6 +2368,18 @@ function updatePinBar() {
 
           const face = make("span", "rb-pin-face");
 
+          for (const property of [
+            "width", "height",
+            "min-width", "min-height",
+            "max-width", "max-height"
+          ]) {
+            face.style.setProperty(property, "80px", "important");
+          }
+
+          face.style.setProperty("box-sizing", "border-box", "important");
+          face.style.setProperty("padding", "0", "important");
+          face.style.setProperty("border", "0", "important");
+
           if (item.avatar) {
             const shadow = make("img", "rb-pin-shadow");
             shadow.src = item.avatar;
@@ -2379,6 +2387,22 @@ function updatePinBar() {
             shadow.setAttribute("aria-hidden", "true");
 
             const image = make("img", "rb-pin-image");
+
+            for (const property of [
+              "width", "height",
+              "min-width", "min-height",
+              "max-width", "max-height"
+            ]) {
+              image.style.setProperty(property, "80px", "important");
+            }
+
+            image.style.setProperty("box-sizing", "border-box", "important");
+            image.style.setProperty("padding", "0", "important");
+            image.style.setProperty("border", "0", "important");
+            image.style.setProperty("border-radius", "50%", "important");
+            image.style.setProperty("object-fit", "cover", "important");
+            image.style.setProperty("object-position", "center", "important");
+
             image.src = item.avatar;
             image.alt = "";
 
