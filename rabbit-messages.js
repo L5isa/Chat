@@ -2637,6 +2637,7 @@ addAction(
       return el;
     }
 
+const privacyShadowOriginals = new Map();
 const chatDecorations = new Map();
     const chatBookmarkUIs = new Map();
 
@@ -3417,6 +3418,47 @@ const previewPrivate = privateRoles.has(group.name);
           previewPrivate
         );
 
+        const privacyElements = group.section.querySelectorAll(
+          ".rb-preview, .rb-preview *, .chatMessage, .chatMessage *"
+        );
+
+        for (const element of privacyElements) {
+          if (previewPrivate) {
+            if (!privacyShadowOriginals.has(element)) {
+              privacyShadowOriginals.set(element, {
+                value: element.style.getPropertyValue("text-shadow"),
+                priority: element.style.getPropertyPriority("text-shadow")
+              });
+            }
+
+            element.style.setProperty(
+              "text-shadow",
+              "0 0 6px var(--rb-privacy-shadow)",
+              "important"
+            );
+          } else if (privacyShadowOriginals.has(element)) {
+            const original = privacyShadowOriginals.get(element);
+
+            if (original.value) {
+              element.style.setProperty(
+                "text-shadow",
+                original.value,
+                original.priority
+              );
+            } else {
+              element.style.removeProperty("text-shadow");
+            }
+
+            privacyShadowOriginals.delete(element);
+          }
+        }
+
+        for (const element of privacyShadowOriginals.keys()) {
+          if (!element.isConnected) {
+            privacyShadowOriginals.delete(element);
+          }
+        }
+
         const privacyButton = group.section.querySelector(
           ".rb-privacy-toggle"
         );
@@ -4103,6 +4145,20 @@ for (const [el, ui] of chatDecorations) {
       }
 
       chatDecorations.clear();
+
+      for (const [element, original] of privacyShadowOriginals) {
+        if (original.value) {
+          element.style.setProperty(
+            "text-shadow",
+            original.value,
+            original.priority
+          );
+        } else {
+          element.style.removeProperty("text-shadow");
+        }
+      }
+
+      privacyShadowOriginals.clear();
       listMoreButton.remove();
       restoreList(list);
 
