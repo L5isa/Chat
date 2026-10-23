@@ -966,7 +966,7 @@ height: 19px;
         isolation: isolate;
         color: transparent !important;
         -webkit-text-fill-color: transparent;
-        text-shadow: 0 0 6px var(--rb-privacy-shadow);
+        text-shadow: 0 0 6px var(--rb-privacy-shadow) !important;
         user-select: none;
         -webkit-user-select: none;
         -webkit-mask-image:
@@ -1009,7 +1009,7 @@ height: 19px;
       #chat .welcomePanel .rb-group[data-rb-private] .chatMessage * {
         color: transparent !important;
         -webkit-text-fill-color: transparent;
-        text-shadow: 0 0 6px var(--rb-privacy-shadow);
+        text-shadow: 0 0 6px var(--rb-privacy-shadow) !important;
       }
 
       #chat .welcomePanel .rb-group[data-rb-private] .rb-preview::after,
