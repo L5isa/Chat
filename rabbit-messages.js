@@ -323,6 +323,134 @@ const ROLE_INDEX_STORE = "rabbit.chatGroups.roleIndex.v1";
       } catch {}
     }
 
+function getExistingRoleNames() {
+      const names = new Set();
+      let foundSource = false;
+
+      try {
+        const ctx = view.SillyTavern?.getContext?.();
+        if (Array.isArray(ctx?.characters) && ctx.characters.length > 0) {
+          foundSource = true;
+          for (const c of ctx.characters) {
+            if (c?.name) names.add(String(c.name).trim());
+          }
+        }
+        if (Array.isArray(ctx?.groups)) {
+          for (const g of ctx.groups) {
+            if (g?.name) names.add(String(g.name).trim());
+          }
+        }
+      } catch {}
+
+      const charBlock = doc.querySelector("#rm_print_characters_block");
+      if (charBlock) {
+        const entities = charBlock.querySelectorAll(".character_select, .group_select, .entity_block");
+        if (entities.length > 0) {
+          foundSource = true;
+          for (const el of entities) {
+            const avatarTitle = el.querySelector(".avatar[title]")?.getAttribute("title") || "";
+            const match = avatarTitle.match(/^\[(?:Character|Group)\]\s*(.+?)(?:\r?\n|$)/i);
+            if (match?.[1]) {
+              names.add(match[1].trim());
+            }
+            const nameEl = el.querySelector(".ch_name, .character_name, .group_name");
+            if (nameEl?.textContent) {
+              names.add(nameEl.textContent.trim());
+            }
+          }
+        }
+      }
+
+      return foundSource ? names : null;
+    }
+
+    function purgeDeletedRole(name) {
+      let changed = false;
+
+      if (roleIndex.delete(name)) {
+        saveRoleIndex();
+        changed = true;
+      }
+
+      const pinIdx = rolePins.indexOf(name);
+      if (pinIdx !== -1) {
+        rolePins.splice(pinIdx, 1);
+        saveRolePins();
+        changed = true;
+      }
+
+      if (rolePinMeta.delete(name)) {
+        saveRolePinMeta();
+        changed = true;
+      }
+
+      if (aliases.delete(name)) {
+        saveAliases();
+        changed = true;
+      }
+
+      if (privateRoles.delete(name)) {
+        try {
+          view.localStorage.setItem(PRIVACY_STORE, JSON.stringify([...privateRoles]));
+        } catch {}
+        changed = true;
+      }
+
+      if (hiddenRoles.delete(name)) {
+        try {
+          view.localStorage.setItem(HIDDEN_ROLE_STORE, JSON.stringify([...hiddenRoles]));
+        } catch {}
+        changed = true;
+      }
+
+      if (states.delete(name)) {
+        saveStates();
+        changed = true;
+      }
+
+      temporaryStates.delete(name);
+      if (activePin === name) activePin = null;
+      if (selectedPin === name) selectedPin = null;
+
+      let bmChanged = false;
+      for (const key of [...chatBookmarks]) {
+        try {
+          const parsed = JSON.parse(key);
+          if (Array.isArray(parsed) && parsed[0] === name) {
+            chatBookmarks.delete(key);
+            bmChanged = true;
+          }
+        } catch {}
+      }
+      if (bmChanged) saveChatBookmarks();
+
+      return changed;
+    }
+
+function confirmPurgeRole(name) {
+      const label = displayName(name);
+      const ok = view.confirm(
+        `确定要彻底移除「${label}」的本页缓存记录吗？\n\n` +
+        `移除后，该角色的置顶、改名、隐私及未载入占位都会被清除（不会删除酒馆里的角色卡文件）。`
+      );
+
+      if (!ok) return false;
+
+      purgeDeletedRole(name);
+
+      for (let i = groups.length - 1; i >= 0; i--) {
+        if (groups[i].name === name) {
+          groups[i].section.remove();
+          groups.splice(i, 1);
+        }
+      }
+
+      previous = [];
+      pinSignature = "";
+      refreshView();
+      return true;
+    }
+
     let states = new Map();
 
     try {
@@ -1042,13 +1170,18 @@ url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2
         background: var(--rb-surface);
       }
 
+      #chat .welcomePanel .rb-group[data-rb-unavailable] .rb-role-actions {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
       #chat .welcomePanel .recentChatList[data-rb-editing] .rb-role-actions {
         display: grid;
       }
 
       #chat .welcomePanel .rb-role-actions .rb-role-pin,
       #chat .welcomePanel .rb-role-actions .rb-privacy-toggle,
-      #chat .welcomePanel .rb-role-actions .rb-hide-role {
+      #chat .welcomePanel .rb-role-actions .rb-hide-role,
+      #chat .welcomePanel .rb-role-actions .rb-purge-role {
         position: relative;
         display: flex;
         align-items: center;
@@ -1075,8 +1208,17 @@ url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2
         -webkit-tap-highlight-color: transparent;
       }
 
-#chat .welcomePanel .rb-role-actions .rb-privacy-toggle::before,
-      #chat .welcomePanel .rb-role-actions .rb-hide-role::before {
+      #chat .welcomePanel .rb-role-actions .rb-purge-role {
+        color: var(--rb-danger) !important;
+      }
+
+      #chat .welcomePanel .rb-group:not([data-rb-unavailable]) .rb-role-actions .rb-purge-role {
+        display: none !important;
+      }
+
+      #chat .welcomePanel .rb-role-actions .rb-privacy-toggle::before,
+      #chat .welcomePanel .rb-role-actions .rb-hide-role::before,
+      #chat .welcomePanel .rb-role-actions .rb-purge-role::before {
         content: "";
         position: absolute;
         left: -2px;
@@ -1615,8 +1757,11 @@ font-weight: 600;
       }
 
       #chat .welcomePanel .rb-pin-action[data-rb-remove] {
-        grid-column: 1 / -1;
         color: var(--rb-danger);
+      }
+
+      #chat .welcomePanel .rb-pin-action[data-rb-remove]:nth-child(odd):last-child {
+        grid-column: 1 / -1;
       }
 
 #chat .welcomePanel .rb-pin-action:focus-visible {
@@ -2572,6 +2717,16 @@ addAction(
           true
         );
 
+        const selectedItem = items.find(i => i.name === selectedName);
+        if (selectedItem && !selectedItem.available) {
+          addAction(
+            "移除缓存",
+            false,
+            () => confirmPurgeRole(selectedName),
+            true
+          );
+        }
+
         editor.append(title, actions);
         pinBar.appendChild(editor);
       }
@@ -3202,11 +3357,29 @@ function renameGroup(name) {
         toggleHiddenRole(name);
       });
 
+      const purgeRoleButton = make(
+        "button",
+        "rb-purge-role",
+        "移除缓存"
+      );
+      purgeRoleButton.type = "button";
+      purgeRoleButton.setAttribute(
+        "aria-label",
+        `移除角色缓存：${displayName(name)}`
+      );
+
+      purgeRoleButton.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        confirmPurgeRole(name);
+      });
+
       const roleActions = make("div", "rb-role-actions");
       roleActions.append(
         rolePinButton,
         privacyButton,
-        hideRoleButton
+        hideRoleButton,
+        purgeRoleButton
       );
 
       headerWrap.append(header, bookmark);
@@ -3937,23 +4110,39 @@ for (const [el, ui] of chatDecorations) {
           saveRoleIndex();
         }
 
+        const existingRoles = getExistingRoleNames();
+
+        if (existingRoles) {
+          for (const name of [... new Set([
+            ...roleIndex.keys(),
+            ...rolePins,
+            ...aliases.keys(),
+            ...privateRoles,
+            ...hiddenRoles
+          ])]) {
+            if (buckets[name] === undefined && !existingRoles.has(name)) {
+              purgeDeletedRole(name);
+            }
+          }
+        }
+
         for (const [name, cached] of roleIndex) {
-  if (buckets[name] !== undefined) continue;
+          if (buckets[name] !== undefined) continue;
 
-  const customized =
-    rolePins.includes(name) ||
-    aliases.has(name) ||
-    privateRoles.has(name) ||
-    hiddenRoles.has(name);
+          const customized =
+            rolePins.includes(name) ||
+            aliases.has(name) ||
+            privateRoles.has(name) ||
+            hiddenRoles.has(name);
 
-  if (!customized) continue;
+          if (!customized) continue;
 
-  batches.push({
-    name,
-    records: [],
-    cached
-  });
-}
+          batches.push({
+            name,
+            records: [],
+            cached
+          });
+        }
 
         const oldSections = Array.from(list.children).filter(
           element => element.classList.contains("rb-group")
@@ -4055,6 +4244,17 @@ for (const [el, ui] of chatDecorations) {
       if (list) {
         if (!list.isConnected || !toolbar.isConnected) {
           schedule();
+          return;
+        }
+
+        for (const record of records) {
+          if (
+            record.target instanceof view.Element &&
+            record.target.closest("#rm_print_characters_block")
+          ) {
+            schedule();
+            return;
+          }
         }
 
         return;
