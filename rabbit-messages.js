@@ -1072,7 +1072,7 @@ height: 19px;
         flex: 0 0 15px;
         align-items: center;
         justify-content: center;
-        color: #C7C7C9;
+        color: var(--rb-faint);
         transition: transform .2s;
       }
 
@@ -1460,7 +1460,7 @@ url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2
 
       #chat .welcomePanel .rb-meta-dot {
         flex: 0 0 auto;
-        color: #aaa8a2;
+        color: var(--rb-faint);
       }
 
       #chat .welcomePanel .rb-chat-meta .rb-meta-stat {
