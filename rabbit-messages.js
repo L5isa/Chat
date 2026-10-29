@@ -323,46 +323,68 @@ const ROLE_INDEX_STORE = "rabbit.chatGroups.roleIndex.v1";
       } catch {}
     }
 
-function getExistingRoleNames() {
-      const names = new Set();
-      let foundSource = false;
-
+function getDeletingCharacterName() {
       try {
         const ctx = view.SillyTavern?.getContext?.();
-        if (Array.isArray(ctx?.characters) && ctx.characters.length > 0) {
-          foundSource = true;
-          for (const c of ctx.characters) {
-            if (c?.name) names.add(String(c.name).trim());
-          }
-        }
-        if (Array.isArray(ctx?.groups)) {
-          for (const g of ctx.groups) {
-            if (g?.name) names.add(String(g.name).trim());
-          }
+        if (ctx?.characterId !== undefined && ctx?.characters?.[ctx.characterId]?.name) {
+          return String(ctx.characters[ctx.characterId].name).trim();
         }
       } catch {}
 
-      const charBlock = doc.querySelector("#rm_print_characters_block");
-      if (charBlock) {
-        const entities = charBlock.querySelectorAll(".character_select, .group_select, .entity_block");
-        if (entities.length > 0) {
-          foundSource = true;
-          for (const el of entities) {
-            const avatarTitle = el.querySelector(".avatar[title]")?.getAttribute("title") || "";
-            const match = avatarTitle.match(/^\[(?:Character|Group)\]\s*(.+?)(?:\r?\n|$)/i);
-            if (match?.[1]) {
-              names.add(match[1].trim());
-            }
-            const nameEl = el.querySelector(".ch_name, .character_name, .group_name");
-            if (nameEl?.textContent) {
-              names.add(nameEl.textContent.trim());
-            }
-          }
+      const nameBlock = doc.querySelector(
+        "#character_name_pole, #avatar-and-name-block .ch_name, #rm_button_selected_ch h2"
+      );
+      if (nameBlock) {
+        const val = ("value" in nameBlock ? nameBlock.value : nameBlock.textContent) || "";
+        if (val.trim()) return val.trim();
+      }
+
+      const selected = doc.querySelector("#rm_print_characters_block .character_select.selected");
+      if (selected) {
+        const avatarTitle = selected.querySelector(".avatar[title]")?.getAttribute("title") || "";
+        const match = avatarTitle.match(/^\[(?:Character|Group)\]\s*(.+?)(?:\r?\n|$)/i);
+        if (match?.[1]) return match[1].trim();
+      }
+
+      return "";
+    }
+
+    function removeRoleFromView(name) {
+      purgeDeletedRole(name);
+
+      for (let i = groups.length - 1; i >= 0; i--) {
+        if (groups[i].name === name) {
+          groups[i].section.remove();
+          groups.splice(i, 1);
         }
       }
 
-      return foundSource ? names : null;
+      previous = [];
+      pinSignature = "";
+      refreshView();
     }
+
+    function handleDeletePopupConfirm(event) {
+      const target = event.target;
+      if (!(target instanceof view.Element)) return;
+
+      const okBtn = target.closest("dialog.popup .popup-button-ok");
+      if (!okBtn) return;
+
+      const dialog = okBtn.closest("dialog.popup");
+      const delCheckbox = dialog?.querySelector("#del_char_checkbox");
+      if (!delCheckbox || !delCheckbox.checked) return;
+
+      const targetName = getDeletingCharacterName();
+      if (!targetName) return;
+
+      view.setTimeout(() => {
+        if (stopped) return;
+        removeRoleFromView(targetName);
+      }, 200);
+    }
+
+    doc.addEventListener("click", handleDeletePopupConfirm, true);
 
     function purgeDeletedRole(name) {
       let changed = false;
@@ -436,18 +458,7 @@ function confirmPurgeRole(name) {
 
       if (!ok) return false;
 
-      purgeDeletedRole(name);
-
-      for (let i = groups.length - 1; i >= 0; i--) {
-        if (groups[i].name === name) {
-          groups[i].section.remove();
-          groups.splice(i, 1);
-        }
-      }
-
-      previous = [];
-      pinSignature = "";
-      refreshView();
+      removeRoleFromView(name);
       return true;
     }
 
@@ -4110,22 +4121,6 @@ for (const [el, ui] of chatDecorations) {
           saveRoleIndex();
         }
 
-        const existingRoles = getExistingRoleNames();
-
-        if (existingRoles) {
-          for (const name of [... new Set([
-            ...roleIndex.keys(),
-            ...rolePins,
-            ...aliases.keys(),
-            ...privateRoles,
-            ...hiddenRoles
-          ])]) {
-            if (buckets[name] === undefined && !existingRoles.has(name)) {
-              purgeDeletedRole(name);
-            }
-          }
-        }
-
         for (const [name, cached] of roleIndex) {
           if (buckets[name] !== undefined) continue;
 
@@ -4325,6 +4320,7 @@ for (const [el, ui] of chatDecorations) {
       pendingAvatarTasks.clear();
       colorCache.clear();
       doc.removeEventListener("click", handleToolsOutside, true);
+      doc.removeEventListener("click", handleDeletePopupConfirm, true);
       doc.removeEventListener("click", handleGroupToggle);
       view.removeEventListener("resize", handlePinResize);
       pinResizeObserver?.disconnect();
