@@ -583,23 +583,36 @@ function confirmPurgeRole(name) {
   content: none !important;
   display: none !important;
 }
+      #chat .welcomePanel {
+        overflow-x: hidden !important;
+      }
+
       #chat .welcomePanel .recentChatList[data-rb-list] {
         display: flex;
         flex-direction: column;
         gap: 0;
-        width: 100%;
+        width: var(--rb-design-width, 100%);
         min-width: 0;
-        margin: 0;
+        margin: 0 0 var(--rb-list-trim, 0px) 0;
         padding: 0;
+        box-sizing: border-box;
+        position: relative;
+        left: 50%;
+        transform: translateX(-50%) scale(var(--rb-scale, 1));
+        transform-origin: top center;
       }
 
 #chat .welcomePanel .rb-search-panel {
-        width: auto;
+        width: calc(var(--rb-design-width, 100%) - 24px);
         min-width: 0;
-        margin: 4px 12px 12px;
+        margin: 4px 0 calc(12px + var(--rb-toolbar-trim, 0px)) 0;
         padding: 0;
         box-sizing: border-box;
         font-family: inherit;
+        position: relative;
+        left: 50%;
+        transform: translateX(-50%) scale(var(--rb-scale, 1));
+        transform-origin: top center;
       }
 
       #chat .welcomePanel .rb-search-box {
@@ -3887,6 +3900,11 @@ for (const [el, ui] of chatDecorations) {
       }
 
       updatePinBar();
+      const currentPanel = list?.closest(".welcomePanel");
+      if (currentPanel) panelResizeObserver?.observe(currentPanel);
+      if (list) panelResizeObserver?.observe(list);
+      panelResizeObserver?.observe(toolbar);
+      scheduleScale();
 
       if (inboxMode) {
         status.hidden = false;
@@ -4275,6 +4293,64 @@ for (const [el, ui] of chatDecorations) {
       }
     });
 
+const DESIGN_WIDTH = 380;
+    let scaleFrame = 0;
+
+    function updatePanelScale() {
+      scaleFrame = 0;
+      if (stopped) return;
+
+      const panel =
+        list?.closest(".welcomePanel") ||
+        doc.querySelector("#chat .welcomePanel");
+
+      if (!panel) return;
+
+      const style = view.getComputedStyle(panel);
+      const padLeft = parseFloat(style.paddingLeft) || 0;
+      const padRight = parseFloat(style.paddingRight) || 0;
+      const availableWidth = Math.max(
+        1,
+        (panel.clientWidth || view.innerWidth) - padLeft - padRight
+      );
+
+      if (availableWidth < DESIGN_WIDTH) {
+        const scale = availableWidth / DESIGN_WIDTH;
+        panel.style.setProperty("--rb-design-width", DESIGN_WIDTH + "px");
+        panel.style.setProperty("--rb-scale", String(scale));
+        panel.style.setProperty(
+          "--rb-toolbar-trim",
+          Math.floor(toolbar.offsetHeight * (scale - 1)) + "px"
+        );
+        panel.style.setProperty(
+          "--rb-list-trim",
+          Math.floor((list ? list.offsetHeight : 0) * (scale - 1)) + "px"
+        );
+      } else {
+        panel.style.removeProperty("--rb-design-width");
+        panel.style.removeProperty("--rb-scale");
+        panel.style.removeProperty("--rb-toolbar-trim");
+        panel.style.removeProperty("--rb-list-trim");
+      }
+    }
+
+    function scheduleScale() {
+      if (stopped || scaleFrame) return;
+      scaleFrame = view.requestAnimationFrame(updatePanelScale);
+    }
+
+    view.addEventListener("resize", scheduleScale);
+
+    let panelResizeObserver = null;
+    if (typeof view.ResizeObserver === "function") {
+      panelResizeObserver = new view.ResizeObserver(scheduleScale);
+    }
+
+    function updateSearch() {
+      temporaryStates.clear();
+      refreshView();
+    }
+
     function updateSearch() {
       temporaryStates.clear();
       refreshView();
@@ -4323,6 +4399,9 @@ for (const [el, ui] of chatDecorations) {
       doc.removeEventListener("click", handleDeletePopupConfirm, true);
       doc.removeEventListener("click", handleGroupToggle);
       view.removeEventListener("resize", handlePinResize);
+      view.removeEventListener("resize", scheduleScale);
+      panelResizeObserver?.disconnect();
+      view.cancelAnimationFrame(scaleFrame);
       pinResizeObserver?.disconnect();
       view.cancelAnimationFrame(pinLayoutFrame);
       alignPinTrack = () => {};
