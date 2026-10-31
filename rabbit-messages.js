@@ -583,36 +583,25 @@ function confirmPurgeRole(name) {
   content: none !important;
   display: none !important;
 }
-      #chat .welcomePanel {
-        overflow-x: hidden !important;
-      }
-
       #chat .welcomePanel .recentChatList[data-rb-list] {
         display: flex;
         flex-direction: column;
         gap: 0;
-        width: var(--rb-design-width, 100%);
+        width: 100%;
         min-width: 0;
-        margin: 0 0 var(--rb-list-trim, 0px) 0;
+        margin: 0;
         padding: 0;
-        box-sizing: border-box;
-        position: relative;
-        left: 50%;
-        transform: translateX(-50%) scale(var(--rb-scale, 1));
-        transform-origin: top center;
+        zoom: var(--rb-scale, 1);
       }
 
 #chat .welcomePanel .rb-search-panel {
-        width: calc(var(--rb-design-width, 100%) - 24px);
+        width: auto;
         min-width: 0;
-        margin: 4px 0 calc(12px + var(--rb-toolbar-trim, 0px)) 0;
+        margin: 4px 12px 12px;
         padding: 0;
         box-sizing: border-box;
         font-family: inherit;
-        position: relative;
-        left: 50%;
-        transform: translateX(-50%) scale(var(--rb-scale, 1));
-        transform-origin: top center;
+        zoom: var(--rb-scale, 1);
       }
 
       #chat .welcomePanel .rb-search-box {
@@ -3900,10 +3889,8 @@ for (const [el, ui] of chatDecorations) {
       }
 
       updatePinBar();
-      const currentPanel = list?.closest(".welcomePanel");
-      if (currentPanel) panelResizeObserver?.observe(currentPanel);
-      if (list) panelResizeObserver?.observe(list);
-      panelResizeObserver?.observe(toolbar);
+      const chatEl = doc.querySelector("#chat");
+      if (chatEl) panelResizeObserver?.observe(chatEl);
       scheduleScale();
 
       if (inboxMode) {
@@ -4306,31 +4293,21 @@ const DESIGN_WIDTH = 380;
 
       if (!panel) return;
 
+      const rectWidth = panel.getBoundingClientRect().width || panel.clientWidth;
+      if (!rectWidth || rectWidth <= 0) return;
+
       const style = view.getComputedStyle(panel);
       const padLeft = parseFloat(style.paddingLeft) || 0;
       const padRight = parseFloat(style.paddingRight) || 0;
-      const availableWidth = Math.max(
-        1,
-        (panel.clientWidth || view.innerWidth) - padLeft - padRight
-      );
+      const availableWidth = rectWidth - padLeft - padRight;
 
-      if (availableWidth < DESIGN_WIDTH) {
-        const scale = availableWidth / DESIGN_WIDTH;
-        panel.style.setProperty("--rb-design-width", DESIGN_WIDTH + "px");
-        panel.style.setProperty("--rb-scale", String(scale));
-        panel.style.setProperty(
-          "--rb-toolbar-trim",
-          Math.floor(toolbar.offsetHeight * (scale - 1)) + "px"
-        );
-        panel.style.setProperty(
-          "--rb-list-trim",
-          Math.floor((list ? list.offsetHeight : 0) * (scale - 1)) + "px"
-        );
+      if (availableWidth > 60 && availableWidth < DESIGN_WIDTH) {
+        const scale = Math.max(0.5, availableWidth / DESIGN_WIDTH);
+        if (panel.style.getPropertyValue("--rb-scale") !== String(scale)) {
+          panel.style.setProperty("--rb-scale", String(scale));
+        }
       } else {
-        panel.style.removeProperty("--rb-design-width");
         panel.style.removeProperty("--rb-scale");
-        panel.style.removeProperty("--rb-toolbar-trim");
-        panel.style.removeProperty("--rb-list-trim");
       }
     }
 
