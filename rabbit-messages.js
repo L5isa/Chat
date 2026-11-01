@@ -477,6 +477,8 @@ function confirmPurgeRole(name) {
     style.textContent = `
 
     #chat .welcomePanel {
+  -webkit-text-size-adjust: 100% !important;
+  text-size-adjust: 100% !important;
   --rb-text: var(--SmartThemeBodyColor, #121212);
   --rb-secondary: var(--rb-text);
   --rb-secondary: color-mix(in srgb, var(--rb-text) 78%, transparent);
@@ -1084,16 +1086,16 @@ height: 19px;
 
 #chat .welcomePanel .rb-preview {
         display: -webkit-box;
-        height: calc(2 * 1.32em);
+        height: 32px;
         min-height: 0;
-        max-height: calc(2 * 1.32em);
+        max-height: 32px;
         margin-top: 2px;
         padding: 0;
         overflow: hidden;
         color: var(--rb-muted);
-        font-size: 12px;
+        font-size: 12px !important;
         font-weight: 500;
-        line-height: 1.32;
+        line-height: 17px !important;
         text-align: left;
         white-space: normal;
         overflow-wrap: anywhere;
@@ -1141,9 +1143,9 @@ height: 19px;
       }
 
       #chat .welcomePanel .rb-group[data-rb-private] .chatMessage {
-        height: calc(2 * 1.32em);
-        min-height: calc(2 * 1.32em);
-        max-height: calc(2 * 1.32em);
+        height: 32px;
+        min-height: 32px;
+        max-height: 32px;
       }
 
       #chat .welcomePanel .rb-group[data-rb-private] .rb-preview *,
@@ -1333,11 +1335,12 @@ url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2
 
       #chat .welcomePanel .rb-content .chatMessage {
         display: -webkit-box;
+        max-height: 32px;
         overflow: hidden;
         color: var(--rb-muted);
-        font-size: 12px;
+        font-size: 12px !important;
         font-weight: 500;
-        line-height: 1.32;
+        line-height: 17px !important;
         white-space: normal;
         overflow-wrap: anywhere;
         -webkit-box-orient: vertical;
