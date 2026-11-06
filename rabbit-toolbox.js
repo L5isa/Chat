@@ -40,7 +40,6 @@
   var storageKey = "rabbit-toolbox-toggles-v1";
   var toggles = {
     deleteScrollLock: true,
-    deleteEasySelect: true,
     doubleClickEdit: true,
     avatarHdOriginal: true,
     avatarSquareUpload: true
@@ -166,6 +165,7 @@
     if (event && event.target && event.target.closest && event.target.closest(".mes_edit_done, .mes_edit_cancel, #rabbit-quick-edit-bar, .mes_edit")) return;
     lockUntil = 0;
     editScrollLockUntil = 0;
+    openEditLockUntil = 0;
     if (lockTimer !== null) {
       host.clearTimeout(lockTimer);
       lockTimer = null;
@@ -193,7 +193,7 @@
     }
   }
 
-  /* ==========================================
+/* ==========================================
    * 模块 2：去除选中边框 & 点击楼层任意处选中/取消
    * ========================================== */
   var styleId = "rabbit-toolbox-del-style";
@@ -201,11 +201,6 @@
 
   function syncDeleteStyle() {
     styleEl = doc.getElementById(styleId);
-    if (!toggles.deleteEasySelect) {
-      if (styleEl && styleEl.parentNode) styleEl.parentNode.removeChild(styleEl);
-      styleEl = null;
-      return;
-    }
     if (!styleEl) {
       styleEl = doc.createElement("style");
       styleEl.id = styleId;
@@ -260,46 +255,6 @@
 
   var internalTrigger = false;
 
-  function setSingleMesSelected(mes, selected) {
-    var cb = mes.querySelector(".del_checkbox");
-    if (selected) {
-      mes.classList.add("selected");
-      if (cb) {
-        cb.checked = true;
-        if (host.jQuery) host.jQuery(cb).prop("checked", true);
-      }
-    } else {
-      mes.classList.remove("selected");
-      if (cb) {
-        cb.checked = false;
-        if (host.jQuery) host.jQuery(cb).prop("checked", false);
-      }
-    }
-  }
-
-  function applySelectionList(selectedList) {
-    var chat = getChat();
-    if (!chat) return;
-    var allMes = chat.querySelectorAll(".mes");
-    for (var i = 0; i < allMes.length; i += 1) {
-      var shouldSelect = selectedList.indexOf(allMes[i]) !== -1;
-      setSingleMesSelected(allMes[i], shouldSelect);
-    }
-  }
-
-  function getCurrentlySelectedMesList() {
-    var chat = getChat();
-    if (!chat) return [];
-    var allMes = chat.querySelectorAll(".mes");
-    var list = [];
-    for (var i = 0; i < allMes.length; i += 1) {
-      if (allMes[i].classList.contains("selected")) {
-        list.push(allMes[i]);
-      }
-    }
-    return list;
-  }
-
   function isRangeAllSelectedFrom(startMes) {
     var chat = getChat();
     if (!chat) return false;
@@ -316,35 +271,8 @@
     return reached;
   }
 
-  function syncStInternalStateAndApply(targetList) {
-    if (targetList.length === 0) {
-      clearAllDeleteSelection();
-      host.requestAnimationFrame(clearAllDeleteSelection);
-      return;
-    }
-    var firstMes = targetList[0];
-    var firstCb = firstMes.querySelector(".del_checkbox");
-    if (firstCb) {
-      internalTrigger = true;
-      try {
-        firstCb.checked = false;
-        if (host.jQuery) {
-          host.jQuery(firstCb).trigger("click");
-        } else {
-          firstCb.click();
-        }
-      } finally {
-        internalTrigger = false;
-      }
-    }
-    applySelectionList(targetList);
-    host.requestAnimationFrame(function () {
-      applySelectionList(targetList);
-    });
-  }
-
   function onMesDeleteClick(event) {
-    if (!toggles.deleteEasySelect || internalTrigger) return;
+    if (internalTrigger) return;
     var target = event.target;
     if (!target || target.nodeType !== 1) return;
     if (!isDeletingMode()) return;
@@ -363,10 +291,6 @@
     var cb = mes.querySelector(".del_checkbox");
     if (!cb) return;
 
-    var isCheckbox = Boolean(target.closest(".del_checkbox"));
-    var prevSelected = getCurrentlySelectedMesList();
-    var wasThisMesSelected = prevSelected.indexOf(mes) !== -1;
-
     captureScrollLock(1000);
 
     event.preventDefault();
@@ -375,36 +299,21 @@
       event.stopImmediatePropagation();
     }
 
-    if (isCheckbox) {
-      if (isRangeAllSelectedFrom(mes)) {
-        syncStInternalStateAndApply([]);
-      } else {
-        var chat = getChat();
-        var allMes = chat ? chat.querySelectorAll(".mes") : [];
-        var rangeList = [];
-        var reached = false;
-        for (var i = 0; i < allMes.length; i += 1) {
-          if (allMes[i] === mes) reached = true;
-          if (reached) rangeList.push(allMes[i]);
-        }
-        syncStInternalStateAndApply(rangeList);
-      }
+    if (isRangeAllSelectedFrom(mes)) {
+      clearAllDeleteSelection();
+      host.requestAnimationFrame(clearAllDeleteSelection);
     } else {
-      var nextList = [];
-      for (var j = 0; j < prevSelected.length; j += 1) {
-        if (prevSelected[j] !== mes) {
-          nextList.push(prevSelected[j]);
+      internalTrigger = true;
+      try {
+        cb.checked = false;
+        if (host.jQuery) {
+          host.jQuery(cb).trigger("click");
+        } else {
+          cb.click();
         }
+      } finally {
+        internalTrigger = false;
       }
-      if (!wasThisMesSelected) {
-        nextList.push(mes);
-      }
-      var chatEl = getChat();
-      var allNodes = chatEl ? Array.prototype.slice.call(chatEl.querySelectorAll(".mes")) : [];
-      nextList.sort(function (a, b) {
-        return allNodes.indexOf(a) - allNodes.indexOf(b);
-      });
-      syncStInternalStateAndApply(nextList);
     }
   }
 
@@ -536,13 +445,16 @@
     return doc.querySelector("#chat #curEditTextarea, #chat .mes .edit_textarea");
   }
 
-  function measureCaretOffsetInTextarea(textarea, caretIndex) {
+function measureCaretOffsetInTextarea(textarea, caretIndex) {
     var textBefore = (textarea.value || "").slice(0, caretIndex);
     var mirror = doc.createElement("div");
     var style = host.getComputedStyle(textarea);
 
-    mirror.style.position = "absolute";
+    mirror.style.position = "fixed";
+    mirror.style.top = "0px";
+    mirror.style.left = "-9999px";
     mirror.style.visibility = "hidden";
+    mirror.style.pointerEvents = "none";
     mirror.style.whiteSpace = "pre-wrap";
     mirror.style.wordWrap = "break-word";
     mirror.style.overflowWrap = "break-word";
@@ -593,6 +505,7 @@
 
     editSavedChatScrollTop = chat.scrollTop;
     lockUntil = 0;
+    openEditLockUntil = 0;
     editScrollLockUntil = Date.now() + 900;
   }
 
@@ -829,24 +742,56 @@
     return Math.floor(rawText.length * Math.max(0, Math.min(1, clickRatio || 0)));
   }
 
+
+
+var openEditLockUntil = 0;
+  var openEditSavedScrollTop = 0;
+  var openEditTargetMesId = null;
+  var openEditCaretOffset = 0;
+
+  function keepEditingMesInView() {
+    var chat = getChat();
+    if (!chat || openEditTargetMesId === null) return;
+    var mes = chat.querySelector('.mes[mesid="' + openEditTargetMesId + '"]');
+    if (!mes) return;
+
+    var textarea = mes.querySelector("#curEditTextarea, .edit_textarea");
+    var vv = host.visualViewport;
+    var visibleTop = vv ? vv.offsetTop : 0;
+    var visibleHeight = vv && vv.height > 0 ? vv.height : host.innerHeight;
+    var chatRect = chat.getBoundingClientRect();
+    var topBound = Math.max(chatRect.top, visibleTop);
+    var bottomBound = Math.min(chatRect.bottom, visibleTop + visibleHeight);
+    var availHeight = Math.max(120, bottomBound - topBound);
+    var idealY = topBound + availHeight * 0.42;
+
+    if (textarea) {
+      var taRect = textarea.getBoundingClientRect();
+      var caretInTa = Math.max(0, Math.min(openEditCaretOffset - textarea.scrollTop, textarea.clientHeight));
+      var caretViewportY = taRect.top + caretInTa;
+      var delta = caretViewportY - idealY;
+      if (Math.abs(delta) > 6) {
+        chat.scrollTop += delta;
+      }
+    } else {
+      var mesRect = mes.getBoundingClientRect();
+      var deltaMes = mesRect.top - idealY;
+      if (Math.abs(deltaMes) > 10) {
+        chat.scrollTop += deltaMes;
+      }
+    }
+    openEditSavedScrollTop = chat.scrollTop;
+  }
+
   function scrollTextareaToCaret(textarea, caretIndex) {
     var caretTop = measureCaretOffsetInTextarea(textarea, caretIndex);
+    openEditCaretOffset = caretTop;
 
     if (textarea.scrollHeight > textarea.clientHeight) {
       textarea.scrollTop = Math.max(0, caretTop - textarea.clientHeight * 0.4);
     }
 
-    var chat = getChat();
-    if (chat) {
-      var taRect = textarea.getBoundingClientRect();
-      var chatRect = chat.getBoundingClientRect();
-      var caretViewportY = taRect.top + Math.min(caretTop - textarea.scrollTop, textarea.clientHeight);
-      var idealY = chatRect.top + chatRect.height * 0.38;
-      var delta = caretViewportY - idealY;
-      if (Math.abs(delta) > 24) {
-        chat.scrollTop += delta;
-      }
-    }
+    keepEditingMesInView();
   }
 
   function openMesEditAndLocate(mes, clientX, clientY, targetEl) {
@@ -858,6 +803,10 @@
     var mesText = mes.querySelector(".mes_text");
     if (!mesText) return;
 
+    var chat = getChat();
+    var initialScrollTop = chat ? chat.scrollTop : 0;
+    var targetMesId = mes.getAttribute("mesid");
+
     var rect = mesText.getBoundingClientRect();
     var clickRatio = rect.height > 0 ? (clientY - rect.top) / rect.height : 0;
     var snippets = getCaretSnippetsFromPoint(clientX, clientY, targetEl);
@@ -865,21 +814,23 @@
     var editBtn = mes.querySelector(".mes_edit");
     if (!editBtn) return;
 
-    captureScrollLock(200);
-    editBtn.click();
+    lockUntil = 0;
+    editScrollLockUntil = 0;
+    openEditTargetMesId = targetMesId;
+    openEditSavedScrollTop = initialScrollTop;
+    openEditLockUntil = Date.now() + 1600;
+
+    if (host.jQuery) {
+      host.jQuery(editBtn).trigger("click");
+    } else {
+      editBtn.click();
+    }
+    if (chat) chat.scrollTop = initialScrollTop;
 
     var attempts = 0;
-    function waitForTextarea() {
-      attempts += 1;
-      var textarea = mes.querySelector("#curEditTextarea, .edit_textarea");
-      if (!textarea) {
-        if (attempts < 20) {
-          host.setTimeout(waitForTextarea, 25);
-        }
-        return;
-      }
-
+    function applyLocate(textarea) {
       var caretIdx = findBestCaretIndex(textarea.value || "", snippets, clickRatio);
+      if (chat) chat.scrollTop = initialScrollTop;
       try {
         textarea.focus({ preventScroll: true });
       } catch (err) {
@@ -888,6 +839,35 @@
       textarea.setSelectionRange(caretIdx, caretIdx);
       scrollTextareaToCaret(textarea, caretIdx);
       updateQuickEditBarVisibility();
+
+      openEditLockUntil = Date.now() + 1500;
+      var lockDelays = [16, 40, 80, 140, 220, 320, 450, 600, 800, 1050, 1350];
+      for (var i = 0; i < lockDelays.length; i += 1) {
+        host.setTimeout(function () {
+          if (Date.now() <= openEditLockUntil && openEditTargetMesId === targetMesId) {
+            keepEditingMesInView();
+          }
+        }, lockDelays[i]);
+      }
+    }
+
+    var syncTextarea = mes.querySelector("#curEditTextarea, .edit_textarea");
+    if (syncTextarea) {
+      applyLocate(syncTextarea);
+      return;
+    }
+
+    function waitForTextarea() {
+      attempts += 1;
+      var textarea = mes.querySelector("#curEditTextarea, .edit_textarea");
+      if (!textarea) {
+        if (chat) chat.scrollTop = initialScrollTop;
+        if (attempts < 25) {
+          host.setTimeout(waitForTextarea, 25);
+        }
+        return;
+      }
+      applyLocate(textarea);
     }
 
     host.requestAnimationFrame(waitForTextarea);
@@ -988,6 +968,9 @@
   function onCombinedChatScroll(event) {
     if (event.target && event.target.id === "chat") {
       onChatScroll();
+      if (toggles.doubleClickEdit && Date.now() <= openEditLockUntil) {
+        keepEditingMesInView();
+      }
       if (toggles.doubleClickEdit && Date.now() <= editScrollLockUntil) {
         restoreEditScrollPosition();
       }
@@ -1289,12 +1272,6 @@
         desc: "删除楼层或勾选删除框时锁定当前画面位置"
       },
       {
-        key: "deleteEasySelect",
-        keyAfter: syncDeleteStyle,
-        title: "多选/单选删除",
-        desc: "点击勾选框为经典多选删除，点击正文为单选删除"
-      },
-      {
         key: "doubleClickEdit",
         keyAfter: updateQuickEditBarVisibility,
         title: "双击正文精准定位编辑",
@@ -1471,6 +1448,11 @@
   if (host.visualViewport) {
     host.visualViewport.addEventListener("resize", updateQuickEditBarPosition);
     host.visualViewport.addEventListener("resize", restoreEditScrollPosition);
+    host.visualViewport.addEventListener("resize", function () {
+      if (toggles.doubleClickEdit && Date.now() <= openEditLockUntil) {
+        keepEditingMesInView();
+      }
+    });
     host.visualViewport.addEventListener("scroll", updateQuickEditBarPosition);
   }
 
