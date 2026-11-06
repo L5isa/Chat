@@ -408,7 +408,7 @@
     }
   }
 
-  /* ==========================================
+/* ==========================================
    * 模块 3：双击正文精准定位编辑与悬浮保存栏
    * ========================================== */
   var quickEditStyleId = "rabbit-toolbox-quick-edit-style";
@@ -423,8 +423,8 @@
   var editSavedChatScrollTop = 0;
   var editTargetMesId = null;
   var editSnippetText = "";
+  var editParagraphIndex = -1;
   var editCaretRatio = 0;
-  var editViewportFocusY = 0;
 
   function ensureQuickEditStyle() {
     var style = doc.getElementById(quickEditStyleId);
@@ -564,6 +564,12 @@
     return caretTop;
   }
 
+  function cleanProbeText(str) {
+    return (str || "")
+      .replace(/<[^>]*>/g, "")
+      .replace(/[*_~`#>|"“”'‘’\[\]()（），。！？、；：,.!?;:\s]/g, "");
+  }
+
   function captureEditAreaLock(textarea) {
     var chat = getChat();
     if (!chat || !textarea) return;
@@ -575,40 +581,68 @@
     var caret = typeof textarea.selectionStart === "number" ? textarea.selectionStart : 0;
     editCaretRatio = val.length > 0 ? Math.max(0, Math.min(1, caret / val.length)) : 0;
 
-    var start = Math.max(0, caret - 12);
-    var end = Math.min(val.length, caret + 12);
-    editSnippetText = val.slice(start, end).replace(/[\r\n]+/g, " ").trim();
+    var textBeforeCaret = val.slice(0, caret);
+    var linesBefore = textBeforeCaret.split(/\n+/).filter(function (p) {
+      return cleanProbeText(p).length > 0;
+    });
+    editParagraphIndex = Math.max(0, linesBefore.length - 1);
 
-    var chatRect = chat.getBoundingClientRect();
-    var taRect = textarea.getBoundingClientRect();
-    var caretTopInTa = measureCaretOffsetInTextarea(textarea, caret);
-    var caretVisualY = taRect.top + (caretTopInTa - textarea.scrollTop);
-    editViewportFocusY = Math.max(
-      chatRect.top + 80,
-      Math.min(chatRect.bottom - 80, caretVisualY)
-    );
+    var aroundBefore = cleanProbeText(val.slice(Math.max(0, caret - 18), caret));
+    var aroundAfter = cleanProbeText(val.slice(caret, Math.min(val.length, caret + 18)));
+    editSnippetText = (aroundBefore.slice(-6) + aroundAfter.slice(0, 6)) || aroundBefore || aroundAfter;
 
     editSavedChatScrollTop = chat.scrollTop;
     lockUntil = 0;
-    editScrollLockUntil = Date.now() + 220;
+    editScrollLockUntil = Date.now() + 900;
   }
 
-  function findRenderedBlockY(mesText, snippet, ratio) {
+  function findRenderedBlockY(mesText, snippet, paraIndex, ratio) {
     var rect = mesText.getBoundingClientRect();
+
     if (snippet && snippet.length >= 2) {
-      var blocks = mesText.querySelectorAll("p, li, blockquote, div, span");
-      var probe = snippet.slice(0, 8).trim();
-      for (var i = 0; i < blocks.length; i += 1) {
-        var b = blocks[i];
-        var txt = (b.innerText || b.textContent || "").replace(/[\r\n]+/g, " ");
-        if (probe && txt.indexOf(probe) !== -1) {
-          var bRect = b.getBoundingClientRect();
-          if (bRect.height > 0 && bRect.height < rect.height * 0.85) {
-            return bRect.top + Math.min(24, bRect.height * 0.5);
+      var probes = [
+        snippet,
+        snippet.slice(0, 5),
+        snippet.slice(-5),
+        snippet.slice(0, 3)
+      ];
+      var walker = doc.createTreeWalker(mesText, 4, null, false);
+      var textNodes = [];
+      var n;
+      while ((n = walker.nextNode())) {
+        var cleaned = cleanProbeText(n.nodeValue);
+        if (cleaned.length > 0) {
+          textNodes.push({ node: n, text: cleaned });
+        }
+      }
+
+      for (var p = 0; p < probes.length; p += 1) {
+        var probe = probes[p];
+        if (!probe || probe.length < 2) continue;
+        for (var i = 0; i < textNodes.length; i += 1) {
+          if (textNodes[i].text.indexOf(probe) !== -1) {
+            var parentEl = textNodes[i].node.parentElement;
+            var blockEl = parentEl ? (parentEl.closest("p, li, blockquote") || parentEl) : null;
+            if (blockEl && mesText.contains(blockEl)) {
+              var bRect = blockEl.getBoundingClientRect();
+              if (bRect.height > 0 && bRect.height <= rect.height) {
+                return bRect.top + Math.min(36, bRect.height * 0.5);
+              }
+            }
           }
         }
       }
     }
+
+    var paras = mesText.querySelectorAll("p, li, blockquote");
+    if (paraIndex >= 0 && paras.length > 0) {
+      var targetIdx = Math.min(paraIndex, paras.length - 1);
+      var pRect = paras[targetIdx].getBoundingClientRect();
+      if (pRect.height > 0) {
+        return pRect.top + Math.min(36, pRect.height * 0.5);
+      }
+    }
+
     return rect.top + rect.height * ratio;
   }
 
@@ -622,15 +656,14 @@
       if (mes && !mes.querySelector("#curEditTextarea, .edit_textarea")) {
         var mesText = mes.querySelector(".mes_text");
         if (mesText) {
-          var targetVisualY = findRenderedBlockY(mesText, editSnippetText, editCaretRatio);
+          var targetVisualY = findRenderedBlockY(mesText, editSnippetText, editParagraphIndex, editCaretRatio);
           var chatRect = chat.getBoundingClientRect();
-          var desiredY = editViewportFocusY || (chatRect.top + chatRect.height * 0.42);
+          var desiredY = chatRect.top + chatRect.height * 0.45;
           var delta = targetVisualY - desiredY;
-          if (Math.abs(delta) > 4) {
+          if (Math.abs(delta) > 2) {
             chat.scrollTop += delta;
           }
           editSavedChatScrollTop = chat.scrollTop;
-          editScrollLockUntil = 0;
           return;
         }
       }
@@ -642,8 +675,9 @@
   }
 
   function scheduleEditScrollRestore() {
+    editScrollLockUntil = Date.now() + 900;
     host.requestAnimationFrame(restoreEditScrollPosition);
-    var delays = [16, 50, 120];
+    var delays = [20, 60, 120, 220, 360, 520, 720, 880];
     for (var i = 0; i < delays.length; i += 1) {
       host.setTimeout(restoreEditScrollPosition, delays[i]);
     }
@@ -1436,6 +1470,7 @@
 
   if (host.visualViewport) {
     host.visualViewport.addEventListener("resize", updateQuickEditBarPosition);
+    host.visualViewport.addEventListener("resize", restoreEditScrollPosition);
     host.visualViewport.addEventListener("scroll", updateQuickEditBarPosition);
   }
 
