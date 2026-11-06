@@ -427,26 +427,32 @@
   var editViewportFocusY = 0;
 
   function ensureQuickEditStyle() {
-    if (doc.getElementById(quickEditStyleId)) return;
-    var style = doc.createElement("style");
-    style.id = quickEditStyleId;
+    var style = doc.getElementById(quickEditStyleId);
+    if (!style) {
+      style = doc.createElement("style");
+      style.id = quickEditStyleId;
+      (doc.head || doc.documentElement).appendChild(style);
+    }
     style.textContent =
       "#rabbit-quick-edit-bar {" +
-      "  position: fixed;" +
-      "  right: 12px;" +
-      "  bottom: var(--rabbit-kb-offset, 54px);" +
+      "  position: fixed !important;" +
+      "  right: 12px !important;" +
+      "  bottom: var(--rabbit-kb-offset, 54px) !important;" +
+      "  top: var(--rabbit-kb-top, auto) !important;" +
       "  display: none;" +
       "  align-items: center;" +
       "  gap: 6px;" +
       "  margin: 0;" +
       "  padding: 0;" +
       "  background: transparent;" +
-      "  z-index: 9999;" +
+      "  z-index: 2147483647 !important;" +
+      "  pointer-events: auto !important;" +
+      "  transform: translateZ(0);" +
       "  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Microsoft YaHei', sans-serif;" +
       "  -webkit-font-smoothing: antialiased;" +
       "}" +
       "#rabbit-quick-edit-bar.is-visible {" +
-      "  display: inline-flex;" +
+      "  display: inline-flex !important;" +
       "}" +
       "#rabbit-quick-edit-bar > button {" +
       "  appearance: none;" +
@@ -478,7 +484,6 @@
       "  color: #0f0f0f !important;" +
       "  background: #E4E3DF !important;" +
       "}";
-    (doc.head || doc.documentElement).appendChild(style);
   }
 
   function ensureQuickEditBar() {
@@ -502,21 +507,27 @@
     cancelBtn.id = "rabbit-quick-edit-cancel";
     cancelBtn.textContent = "取消";
 
-    saveBtn.addEventListener("click", function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      triggerActiveEditAction(".mes_edit_done");
-    });
+    function bindAction(btn, selector) {
+      var lastRun = 0;
+      function handler(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var now = Date.now();
+        if (now - lastRun < 250) return;
+        lastRun = now;
+        triggerActiveEditAction(selector);
+      }
+      btn.addEventListener("pointerdown", handler);
+      btn.addEventListener("touchstart", handler, { passive: false });
+      btn.addEventListener("click", handler);
+    }
 
-    cancelBtn.addEventListener("click", function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      triggerActiveEditAction(".mes_edit_cancel");
-    });
+    bindAction(saveBtn, ".mes_edit_done");
+    bindAction(cancelBtn, ".mes_edit_cancel");
 
     bar.appendChild(cancelBtn);
     bar.appendChild(saveBtn);
-    doc.body.appendChild(bar);
+    (doc.documentElement || doc.body).appendChild(bar);
     quickEditBar = bar;
     return bar;
   }
@@ -671,14 +682,21 @@
 
   function updateQuickEditBarPosition() {
     if (!quickEditBar) return;
-    var offset = 54;
-    if (host.visualViewport) {
-      var kbHeight = host.innerHeight - host.visualViewport.height - host.visualViewport.offsetTop;
-      if (kbHeight > 80) {
-        offset = Math.round(kbHeight + 12);
+    var vv = host.visualViewport;
+    var visibleBottom = vv && vv.height > 0 ? (vv.offsetTop + vv.height) : host.innerHeight;
+
+    var anchorBottom = visibleBottom;
+    var bottomForm = doc.querySelector("#send_form, #form_sheld");
+    if (bottomForm) {
+      var formRect = bottomForm.getBoundingClientRect();
+      if (formRect.height > 0 && formRect.top < visibleBottom && formRect.bottom > 0) {
+        anchorBottom = Math.min(visibleBottom, formRect.top);
       }
     }
-    quickEditBar.style.setProperty("--rabbit-kb-offset", offset + "px");
+
+    var topPos = Math.max(48, Math.round(anchorBottom - 38));
+    quickEditBar.style.setProperty("--rabbit-kb-top", topPos + "px");
+    quickEditBar.style.setProperty("--rabbit-kb-offset", "auto");
   }
 
   function updateQuickEditBarVisibility() {
