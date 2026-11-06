@@ -1054,6 +1054,8 @@ height: 19px;
 
       #chat .welcomePanel .rb-name {
         min-width: 0;
+        padding: 3px 0;
+        margin: -3px 0;
         overflow: hidden;
         color: var(--rb-text);
         font-size: 13px;
@@ -1660,13 +1662,12 @@ font-weight: 600;
 
       #chat .welcomePanel .rb-nav-title {
         min-width: 0;
-        overflow: hidden;
+        overflow: visible;
         color: var(--rb-text);
         font-size: 19px;
         font-weight: 650;
         line-height: 1.3;
         text-align: center;
-        text-overflow: ellipsis;
         white-space: nowrap;
       }
 
@@ -3090,8 +3091,37 @@ const isPinned = Boolean(pinIcon);
       const chatName = el.querySelector(".chatName");
       const preview = el.querySelector(".chatMessage");
       const date = el.querySelector(".chatDate");
-      const avatarElement = el.querySelector(".avatar img");
-      const avatar = avatarElement ? avatarElement.src : "";
+      const avatarWrap = el.querySelector(".avatar");
+      const avatarElement = avatarWrap?.querySelector("img") || el.querySelector("img");
+      let avatar = "";
+
+      if (avatarElement) {
+        const candidates = [
+          avatarElement.currentSrc,
+          avatarElement.getAttribute("src"),
+          avatarElement.getAttribute("data-src"),
+          avatarElement.getAttribute("data-lazy-src"),
+          avatarElement.getAttribute("data-original"),
+          avatarElement.dataset?.src
+        ];
+        for (const item of candidates) {
+          if (item && !item.startsWith("data:image/gif") && !item.startsWith("data:image/svg")) {
+            avatar = new URL(item, doc.baseURI).href;
+            break;
+          }
+        }
+      }
+
+      if (!avatar && avatarWrap) {
+        const bg =
+          avatarWrap.style.backgroundImage ||
+          view.getComputedStyle(avatarWrap).backgroundImage ||
+          "";
+        const match = bg.match(/url\((['"]?)(.*?)\1\)/i);
+        if (match?.[2] && !match[2].startsWith("data:image/gif")) {
+          avatar = new URL(match[2], doc.baseURI).href;
+        }
+      }
 
       const data = {
         el,
@@ -3972,7 +4002,7 @@ for (const [el, ui] of chatDecorations) {
         subtree: true,
         characterData: true,
         attributes: true,
-        attributeFilter: ["class", "src", "title", "hidden"]
+        attributeFilter: ["class", "src", "data-src", "data-lazy-src", "style", "title", "hidden"]
       });
     }
 
@@ -4189,6 +4219,26 @@ for (const [el, ui] of chatDecorations) {
           if (reusable) {
             existing.records = batch.records;
             existing.cached = cached;
+            const avatarBox = existing.header.querySelector(".rb-avatar");
+            if (avatarBox && !avatarBox.querySelector("img")) {
+              const lateAvatar =
+                batch.records.find(r => r.avatar)?.avatar ||
+                cached?.avatar ||
+                "";
+              if (lateAvatar) {
+                const img = doc.createElement("img");
+                img.alt = "";
+                img.loading = "eager";
+                img.width = 45;
+                img.height = 45;
+                img.src = lateAvatar;
+                avatarBox.appendChild(img);
+                avatarColor(lateAvatar).then(color => {
+                  if (stopped) return;
+                  existing.bookmark.style.setProperty("--rb-dot-color", color);
+                });
+              }
+            }
             return existing;
           }
 
