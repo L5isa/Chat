@@ -168,6 +168,21 @@
       return task;
     }
 
+// 定位：单角色聊天显示条数限制存储
+    const CHAT_LIMIT_STORE = "rabbit.chatGroups.chatLimit.v1";
+    let chatLimitPerRole = 5;
+    const expandedChatRoles = new Set();
+
+    try {
+      const savedLimit = view.localStorage.getItem(CHAT_LIMIT_STORE);
+      if (savedLimit !== null) {
+        const parsed = parseInt(savedLimit, 10);
+        if (!Number.isNaN(parsed) && parsed >= 0) {
+          chatLimitPerRole = parsed;
+        }
+      }
+    } catch {}
+
 const NATIVE_HEADER_STORE = "rabbit.chatGroups.hideNativeHeader.v1";
     let hideNativeHeader = true;
 
@@ -1265,6 +1280,54 @@ url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2
         border-left: 0;
       }
 
+#chat .welcomePanel .rb-chat-more {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        align-self: flex-end;
+        width: auto;
+        min-width: 0;
+        min-height: 26px;
+        box-sizing: border-box;
+        margin: 2px 4px 4px 0;
+        padding: 4px 6px;
+        border: 0 !important;
+        border-radius: 6px !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        color: var(--rb-muted) !important;
+        font-family: inherit !important;
+        font-size: 11.5px !important;
+        font-weight: 500 !important;
+        line-height: 1.4 !important;
+        text-shadow: none !important;
+        cursor: pointer;
+        appearance: none;
+        -webkit-appearance: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      #chat .welcomePanel .rb-chat-more svg {
+        display: block;
+        width: 12px;
+        height: 12px;
+        color: var(--rb-faint);
+        transition: transform .2s;
+        pointer-events: none;
+      }
+
+      #chat .welcomePanel .rb-chat-more[aria-expanded="true"] svg {
+        transform: rotate(180deg);
+      }
+
+      #chat .welcomePanel .rb-chat-more:active {
+        opacity: .55;
+      }
+
+      #chat .welcomePanel .rb-chat-more[hidden] {
+        display: none !important;
+      }
+
       #chat .welcomePanel .rb-content .recentChat {
         width: 100%;
         min-width: 0;
@@ -2000,6 +2063,8 @@ toolbar.innerHTML = `
       <button class="rb-header-toggle" type="button" hidden></button>
       <button class="rb-header-toggle rb-chat-count-settings"
         type="button" hidden>调整最近聊天数量</button>
+      <button class="rb-header-toggle rb-role-chat-limit"
+        type="button" hidden></button>
     `;
 
     const topbar = make("div", "rb-topbar");
@@ -2065,6 +2130,47 @@ toolbar.innerHTML = `
     const chatCountSettings = toolbar.querySelector(
       ".rb-chat-count-settings"
     );
+
+// 定位：单角色条数限制按钮逻辑
+    const roleChatLimitBtn = toolbar.querySelector(".rb-role-chat-limit");
+
+    function updateRoleChatLimitButton() {
+      if (!roleChatLimitBtn) return;
+      roleChatLimitBtn.textContent = chatLimitPerRole > 0
+        ? `单角色显示：${chatLimitPerRole}条`
+        : "单角色显示：不限";
+    }
+
+    updateRoleChatLimitButton();
+
+    roleChatLimitBtn.addEventListener("click", () => {
+      const inputVal = view.prompt(
+        "设置同一角色下最多显示的聊天记录条数：\n（输入 0 或留空表示不限制，超出部分可手动点展开）",
+        chatLimitPerRole > 0 ? String(chatLimitPerRole) : "0"
+      );
+
+      if (inputVal === null) return;
+
+      const trimmed = inputVal.trim();
+      const parsed = trimmed === "" ? 0 : parseInt(trimmed, 10);
+
+      if (Number.isNaN(parsed) || parsed < 0) {
+        view.alert("请输入大于或等于 0 的整数哦！");
+        return;
+      }
+
+      chatLimitPerRole = parsed;
+      expandedChatRoles.clear();
+
+      try {
+        view.localStorage.setItem(CHAT_LIMIT_STORE, String(chatLimitPerRole));
+      } catch {
+        view.alert("设置已在本次页面生效，但浏览器未能保存。");
+      }
+
+      updateRoleChatLimitButton();
+      refreshView();
+    });
 
  let settingsButton = null;
     let settingsTimer = 0;
@@ -3441,6 +3547,25 @@ function renameGroup(name) {
         chatFragment.append(record.el);
       });
 
+      // 定位：角色内部折叠更多聊天按钮
+      const chatMoreButton = make("button", "rb-chat-more");
+      chatMoreButton.type = "button";
+      chatMoreButton.hidden = true;
+
+      chatMoreButton.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (expandedChatRoles.has(name)) {
+          expandedChatRoles.delete(name);
+        } else {
+          expandedChatRoles.add(name);
+        }
+
+        refreshView();
+      });
+
+      chatFragment.append(chatMoreButton);
       content.append(chatFragment);
 
       const group = {
@@ -3452,6 +3577,7 @@ function renameGroup(name) {
         date,
         preview,
         bookmark,
+        chatMoreButton,
         cached,
         unavailable
       };
@@ -3590,6 +3716,7 @@ function handleGroupToggle(event) {
 
       headerToggle.hidden = inboxMode || !editing;
       chatCountSettings.hidden = inboxMode || !editing;
+     roleChatLimitBtn.hidden = inboxMode || !editing;
       applyNativeHeaderVisibility();
 
       navTitle.textContent = inboxMode ? "Bookmarks" : "Messages";
@@ -3764,7 +3891,56 @@ group.section.toggleAttribute(
             tokens.every(token => searchText.includes(token));
         });
 
-        const visible = new Set(matches.map(record => record.el));
+        // 定位：计算单角色内需要显示的聊天记录
+        const canFoldChats =
+          !inboxMode &&
+          !searching &&
+          chatLimitPerRole > 0 &&
+          matches.length > chatLimitPerRole;
+
+        const isRoleChatsExpanded = expandedChatRoles.has(group.name);
+
+        let displayedMatches = matches;
+
+        if (canFoldChats && !isRoleChatsExpanded) {
+          const pinnedMatches = matches.filter(r =>
+            r.el.hasAttribute("data-rb-pinned")
+          );
+          const unpinnedMatches = matches.filter(r =>
+            !r.el.hasAttribute("data-rb-pinned")
+          );
+          displayedMatches = [...pinnedMatches, ...unpinnedMatches].slice(
+            0,
+            chatLimitPerRole
+          );
+        }
+
+        const visible = new Set(displayedMatches.map(record => record.el));
+
+        if (group.chatMoreButton) {
+          if (canFoldChats) {
+            const hiddenCount = matches.length - chatLimitPerRole;
+            const labelText = isRoleChatsExpanded
+              ? "收起旧聊天"
+              : `展开其余 ${hiddenCount} 条`;
+            group.chatMoreButton.hidden = false;
+            group.chatMoreButton.style.order = "1";
+            group.chatMoreButton.setAttribute(
+              "aria-expanded",
+              String(isRoleChatsExpanded)
+            );
+            group.chatMoreButton.innerHTML = `
+              <span>${labelText}</span>
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="m6 9 6 6 6-6" stroke="currentColor"
+                  stroke-width="2.8" stroke-linecap="round"
+                  stroke-linejoin="round"/>
+              </svg>
+            `;
+          } else {
+            group.chatMoreButton.hidden = true;
+          }
+        }
 
         for (const record of group.records) {
           record.el.hidden = !visible.has(record.el);
